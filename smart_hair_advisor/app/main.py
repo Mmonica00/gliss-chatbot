@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api import chatbot
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -21,3 +22,5 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"message": "Welcome to Smart Hair Advisor API 🚀"}
+
+app.include_router(chatbot.router)
