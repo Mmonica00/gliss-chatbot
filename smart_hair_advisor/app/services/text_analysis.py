@@ -27,14 +27,26 @@ def extract_hair_type_traits(text: str):
       - Prone to split ends
       - Brittle
       - Strawy
+      - Dry
+      - Damaged
+      - Colored 
+      - Bleached
+      - Normal
+      - Dry tips
     """
     text = text.lower()
 
     traits = {
-        "greasy_roots": any(word in text for word in ["greasy roots", "oily roots", "scalp is oily"]),
-        "split_ends": any(word in text for word in ["split ends", "ends are damaged", "split hair"]),
+        "greasy_roots": any(word in text for word in ["greasy roots", "oily roots", "scalp is oily", "hair gets oily", "oily scalp", "greasy scalp"]),
+        "split_ends": any(word in text for word in ["split ends", "ends are damaged", "split hair", "hair splits",]),
         "brittle": "brittle" in text or "breaks easily" in text,
-        "strawy": "strawy" in text or "frizzy" in text or "rough" in text
+        "strawy": "strawy" in text or "frizzy" in text or "rough" in text,
+        "dry": any(word in text for word in ["dry hair", "hair is dry", "dryness", "dry scalp", "dry strands", "parched"]),
+        "damaged": any(word in text for word in ["damaged hair", "hair is damaged", "damage", "damaging", "broken hair", "hair breakage"]),
+        "colored": any(word in text for word in ["colored hair", "hair is colored", "color treated", "color damage", "coloring"]),
+        "bleached": any(word in text for word in ["bleached hair", "hair is bleached", "bleach treated", "bleach damage", "bleaching"]),
+        "normal": any(word in text for word in ["normal hair", "hair is normal", "not dry", "not oily"]),
+        "dry_tips": any(word in text for word in ["dry tips", "tips are dry", "snappy ends", "dry ends", "dry split ends"])
     }
 
     # convert to list of dataset-style terms
@@ -47,6 +59,18 @@ def extract_hair_type_traits(text: str):
         keywords.append("Brittle")
     if traits["strawy"]:
         keywords.append("Strawy")
+    if traits["dry"]:
+        keywords.append("Dry")
+    if traits["damaged"]:
+        keywords.append("Damaged")
+    if traits["colored"]:
+        keywords.append("Colored")  
+    if traits["bleached"]:
+        keywords.append("Bleached")
+    if traits["normal"]:
+        keywords.append("Normal")
+    if traits["dry_tips"]:
+        keywords.append("Dry tips")
 
     return {"traits": traits, "hair_type_keywords": keywords}
 
