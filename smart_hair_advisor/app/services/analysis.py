@@ -1,4 +1,5 @@
-# app/services/hair_photo.py
+# app/services/analysis.py
+
 from rembg import remove
 from PIL import Image
 import io, numpy as np
@@ -6,71 +7,101 @@ import cv2
 
 def extract_hair_mask_bytes(image_bytes: bytes) -> np.ndarray:
     """Return binary mask (0/255) of hair/background using rembg (U2Net)."""
-    # rembg returns RGBA with alpha where foreground is preserved
-    result = remove(image_bytes)  # bytes -> bytes (PNG/PNG with alpha)
+    result = remove(image_bytes)  # bytes -> bytes (PNG with alpha)
     img = Image.open(io.BytesIO(result)).convert("RGBA")
-    alpha = np.array(img.split()[-1])  # alpha channel
+    alpha = np.array(img.split()[-1])  # extract alpha channel
     mask = (alpha > 0).astype("uint8") * 255
     return mask
 
+
 def analyze_hair_features(image_bytes: bytes):
     """
-    Returns simple explainable metrics:
-      - brightness (0-255)
-      - saturation (0-255)
-      - edge_density (0-1)
+    Analyze a hair image and extract explainable metrics + dataset-compatible traits.
+    Returns:
+        {
+          "metrics": {...},
+          "hair_type": {...},
+          "hair_type_keywords": [...],
+          "interpretation": [...]
+        }
     """
-    # Get hair mask
+    # 1. Extract mask and prepare image
     mask = extract_hair_mask_bytes(image_bytes)
-
-    # Load original image as BGR numpy
     pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
-    # Apply mask: keep hair pixels only
+    # Apply mask
     hair_pixels = cv2.bitwise_and(img, img, mask=mask)
-
-    # Convert to HSV for brightness/saturation
     hsv = cv2.cvtColor(hair_pixels, cv2.COLOR_BGR2HSV)
-    v = hsv[:,:,2]
-    s = hsv[:,:,1]
+    v = hsv[:, :, 2]  # brightness
+    s = hsv[:, :, 1]  # saturation
 
-    # compute numeric stats only on hair pixels (mask>0)
     hair_idx = mask > 0
     if hair_idx.sum() == 0:
         return {"error": "no hair detected"}
 
-    brightness = int(v[hair_idx].mean())        # 0-255
-    saturation = int(s[hair_idx].mean())        # 0-255
-
-    # Edge density (Canny)
+    # 2. Compute metrics
+    brightness = int(v[hair_idx].mean())        # 0–255
+    saturation = int(s[hair_idx].mean())        # 0–255
     gray = cv2.cvtColor(hair_pixels, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
-    edge_density = float(edges[hair_idx].sum() / 255) / hair_idx.sum()  # fraction of hair pixels that are edges
+    edge_density = float(edges[hair_idx].sum() / 255) / hair_idx.sum()
 
-    # Rough heuristics mapping
-    heuristics = {}
-    heuristics['brightness'] = brightness
-    heuristics['saturation'] = saturation
-    heuristics['edge_density'] = edge_density
+    metrics = {
+        "brightness": brightness,
+        "saturation": saturation,
+        "edge_density": edge_density
+    }
 
-    # Interpretations (tune thresholds)
-    interpretations = []
-    if brightness < 80:
-        interpretations.append("Dullness / Dryness")
-    if saturation < 50:
-        interpretations.append("Color Fading / Damage")
-    if edge_density > 0.08:  # threshold, tune with examples
-        interpretations.append("Frizz / High Texture")
-    if not interpretations:
-        interpretations.append("Healthy / No major issues detected")
+    # 3. Infer traits (thresholds tuned heuristically)
+    hair_type = {
+        "dull": bool(brightness < 90),
+        "dry": bool((saturation < 60) or (brightness < 80)),
+        "colored_or_bleached": bool(saturation > 120),
+        "long": bool((mask.sum() / 255) > 250000),  # approx. image area threshold
+        "strawy": bool(edge_density > 0.08),
+        "damaged": bool((edge_density > 0.1) or ((brightness < 80) and (saturation < 70)))
+    }
 
-    return {"metrics": heuristics, "interpretation": interpretations}
+    # 4. Map traits to dataset-compatible keywords
+    keyword_map = {
+        "dull": "Dull",
+        "dry": "Dry",
+        "colored_or_bleached": "Colored & Bleached",
+        "long": "Long hair",
+        "strawy": "Strawy",
+        "damaged": "Damaged"
+    }
 
-# Add compatibility wrapper expected by the API:
+    # Include only detected traits
+    hair_type_keywords = [v for k, v in keyword_map.items() if hair_type[k]]
+
+    # 5. Interpretations for user feedback
+    interpretation = []
+    if hair_type["dull"]:
+        interpretation.append("Hair appears dull (low shine).")
+    if hair_type["dry"]:
+        interpretation.append("Hair appears dry — possible lack of moisture.")
+    if hair_type["colored_or_bleached"]:
+        interpretation.append("Hair color treated or bleached.")
+    if hair_type["strawy"]:
+        interpretation.append("Hair appears strawy — frizz or rough texture.")
+    if hair_type["damaged"]:
+        interpretation.append("Visible damage or split ends detected.")
+    if hair_type["long"]:
+        interpretation.append("Detected long hair length.")
+    if not interpretation:
+        interpretation.append("Hair looks healthy and balanced.")
+
+    # 6. Return structured output
+    return {
+        "metrics": metrics,
+        "hair_type": hair_type,
+        "hair_type_keywords": hair_type_keywords,
+        "interpretation": interpretation
+    }
+
+
 def analyze_user_input(image_bytes: bytes):
-    """
-    Compatibility wrapper for older API name.
-    Delegates to analyze_hair_features.
-    """
+    """Compatibility wrapper for API usage."""
     return analyze_hair_features(image_bytes)
