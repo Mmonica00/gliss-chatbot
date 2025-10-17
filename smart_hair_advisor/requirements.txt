@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+opencv-python
+deepface
+spacy
+streamlit
+python-dotenv
+pydantic

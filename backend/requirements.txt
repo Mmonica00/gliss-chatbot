@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-pillow
-pandas
-openai
-python-multipart
-python-dotenv
-xlrd
-python-Levenshtein
