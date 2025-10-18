@@ -7,10 +7,7 @@ import pandas as pd
 import uuid
 import time
 
-# --- Configurable constants ---
 SESSION_TIMEOUT = 600  # 10 minutes
-
-# Session memory storage
 SESSION_MEMORY: Dict[str, Dict[str, Any]] = {}
 
 
@@ -36,19 +33,15 @@ def sanitize(obj):
         return [sanitize(v) for v in obj]
     return _sanitize_value(obj)
 
-
 # --- Session management ---
 def reset_sessions():
-    """Clear all stored user sessions."""
     SESSION_MEMORY.clear()
     print("🧹 All sessions have been reset.")
 
 def generate_session_id() -> str:
-    """Generate a new random session ID."""
     return str(uuid.uuid4())
 
 def _is_session_expired(session_id: str) -> bool:
-    """Check if a session exists and is still active."""
     session_data = SESSION_MEMORY.get(session_id)
     if not session_data:
         return True
@@ -56,12 +49,10 @@ def _is_session_expired(session_id: str) -> bool:
     return (time.time() - last_activity) > SESSION_TIMEOUT
 
 def _refresh_session_timestamp(session_id: str):
-    """Update last activity time."""
     if session_id in SESSION_MEMORY:
         SESSION_MEMORY[session_id]["_last_activity"] = time.time()
 
 def get_or_create_session(session_id: Optional[str]) -> str:
-    """Return a valid session, regenerating if expired."""
     if not session_id or _is_session_expired(session_id):
         new_id = generate_session_id()
         SESSION_MEMORY[new_id] = {"_last_activity": time.time()}
@@ -70,10 +61,8 @@ def get_or_create_session(session_id: Optional[str]) -> str:
     _refresh_session_timestamp(session_id)
     return session_id
 
-
 # --- Session update helper ---
 def update_session(session_id: str, new_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge new user data into existing session."""
     if _is_session_expired(session_id):
         print(f"⚠️ Session {session_id} expired. Creating a new one.")
         session_id = generate_session_id()
@@ -87,7 +76,6 @@ def update_session(session_id: str, new_data: Dict[str, Any]) -> Dict[str, Any]:
     existing["_last_activity"] = time.time()
     SESSION_MEMORY[session_id] = existing
     return existing
-
 
 # --- Match evaluator ---
 def evaluate_matches(matches):
@@ -115,24 +103,22 @@ def evaluate_matches(matches):
         "options": top_products,
     }
 
-
 # --- Core chatbot logic ---
 def generate_chatbot_response(
     message: str,
     image_bytes: Optional[bytes] = None,
     session_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Main conversational logic for chatbot."""
-
-    # Ensure session validity
     session_id = get_or_create_session(session_id)
     print(f"⚙️ Chatbot invoked | Session: {session_id}")
 
-    # --- Step 1: Analyze text ---
+    matches = []
+
+    # --- Step 1: Text analysis ---
     text_result = analyze_text_input(message)
     print("Text analysis result:", text_result)
 
-    # --- Step 2: Analyze optional image ---
+    # --- Step 2: Optional image analysis ---
     image_result = None
     hair_type_tokens = []
     if image_bytes:
@@ -142,13 +128,21 @@ def generate_chatbot_response(
             kws = image_result.get("hair_type_keywords") or []
             hair_type_tokens.extend([str(k).lower() for k in kws])
 
-    # --- Step 3: Merge text + image keywords ---
+    # --- Step 3: Merge hair keywords from text ---
     text_keywords = [str(k).lower() for k in text_result.get("hair_type_keywords", [])]
     hair_type_tokens.extend(text_keywords)
     combined_hair_type = list(dict.fromkeys(hair_type_tokens))
 
-    # --- Step 3.5: Fallbacks ---
+    # --- Step 4: Basic fallback detection from text ---
     text_lower = message.lower()
+
+    need_clarification = False
+    if not text_result.get("is_clarification") and not any(
+        k in text_lower for k in ["hydration", "repair", "nourishment"]
+    ):
+        need_clarification = True
+
+
     if not combined_hair_type:
         if "dry" in text_lower:
             combined_hair_type.append("dry")
@@ -157,24 +151,53 @@ def generate_chatbot_response(
         if "color" in text_lower or "bleach" in text_lower:
             combined_hair_type.append("colored & bleached")
 
-    # --- Step 4: Merge into session ---
+    # --- Step 5: Normalize concern synonyms ---
+    concern_synonyms = {
+        "hydration": "Dryness",
+        "moisture": "Dryness",
+        "moisturizing": "Dryness",
+        "repair": "Damage",
+        "regeneration": "Damage",
+        "shine": "Dullness",
+        "smooth": "Frizz Control",
+        "color protection": "Color Care",
+        "nourishment": "Nutrition",
+    }
+
+    normalized_concern = text_result.get("primary_concern")
+    for key, value in concern_synonyms.items():
+        if key in text_lower:
+            normalized_concern = value
+            break
+
+    # --- Step 6: Handle clarification replies (user says: "hydration", "repair", etc.) ---
+    if text_result.get("is_clarification") or any(k in text_lower for k in ["hydration", "repair", "nourishment"]):
+        print("🧩 Detected clarification intent.")
+        if "hydration" in text_lower or "moisturizing" in text_lower:
+            normalized_concern = "Dryness"
+        elif "repair" in text_lower:
+            normalized_concern = "Damage"
+        elif "nourishment" in text_lower or "nutrition" in text_lower:
+            normalized_concern = "Nutrition"
+
+    # --- Step 7: Merge profile in session ---
     user_profile = update_session(
         session_id,
         {
             "hair_type": combined_hair_type or None,
             "hair_texture": text_result.get("hair_texture"),
-            "primary_concern": text_result.get("primary_concern"),
+            "primary_concern": normalized_concern,
             "secondary_concern": text_result.get("secondary_concern"),
         },
     )
     print("🧠 Merged user profile:", user_profile)
 
-    # --- Step 5: Check completeness ---
+    # --- Step 8: Check required fields ---
     required_fields = ["hair_type", "hair_texture", "primary_concern"]
-    missing = [f for f in required_fields if not user_profile.get(f)]
+    has_all_info = all(user_profile.get(f) for f in required_fields)
 
-    # --- Prevent infinite re-asking of same question ---
-    if missing:
+    if not has_all_info:
+        missing = [f for f in required_fields if not user_profile.get(f)]
         if user_profile.get("_last_asked") == missing:
             return {
                 "message": "I’m still not sure — could you describe your hair in a bit more detail?",
@@ -199,8 +222,9 @@ def generate_chatbot_response(
             "session_id": session_id,
         }
 
-    # --- Step 6: Match evaluation ---
+    # --- ✅ Step 9: Always assign matches before using them ---
     matches = match_user_profile(user_profile)
+
     if not matches:
         return {
             "message": "I couldn’t find a confident match yet. Could you share more about your goals — moisture, volume, or repair?",
@@ -209,10 +233,12 @@ def generate_chatbot_response(
             "session_id": session_id,
         }
 
+    # --- Step 10: Evaluate matches ---
     normalized_matches = [{k.strip(): v for k, v in m.items()} for m in matches]
     top_score = normalized_matches[0].get("match_score", 0)
 
-    if top_score < 0.6:
+    # --- Step 11: Low-confidence fallback ---
+    if top_score < 0.6 and not user_profile.get("primary_concern"):
         return {
             "message": "Hmm, I'm not completely sure yet — could you tell me more about your goals? For example, do you want hydration, color protection, or repair?",
             "need_more_info": True,
@@ -221,11 +247,27 @@ def generate_chatbot_response(
             "session_id": session_id,
         }
 
-    # --- Step 7: Final recommendation ---
+   # --- Step 12: Clarification cycle control ---
     evaluation = evaluate_matches(normalized_matches)
+
+    # Use flag to control clarification behavior
+    if not need_clarification:
+        evaluation["need_clarification"] = False
+
+
+    # Prevent repeated looping if clarification was already given
+    if text_result.get("is_clarification") or any(k in text_lower for k in ["hydration", "repair", "nourishment"]):
+        evaluation["need_clarification"] = False
+        evaluation["message"] = evaluation.get("message", "").replace(
+            "Which goal is more important — repair, hydration, or nourishment?", ""
+        ).strip()
+        evaluation["message"] = evaluation["message"] or "Got it — based on what you said, here’s my best match."
+
+    # --- Step 13: Return response ---
     evaluation.update({
         "user_profile": sanitize(user_profile),
         "matches": sanitize(normalized_matches),
         "session_id": session_id,
     })
+
     return evaluation

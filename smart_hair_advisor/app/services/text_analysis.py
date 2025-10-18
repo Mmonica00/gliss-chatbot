@@ -9,9 +9,7 @@ def extract_hair_texture(text: str):
         return "Fine"
     elif "medium" in text:
         return "Medium"
-    elif "coarse" in text:
-        return "Coarse"
-    elif "thick" in text:
+    elif "coarse" in text or "thick" in text:
         return "Coarse"
     elif "thin" in text:
         return "Fine"
@@ -108,48 +106,58 @@ def extract_concerns(text: str):
 # ==============================
 # 4️⃣ Unified analyzer (SMART VERSION)
 # ==============================
-def analyze_text_input(message: str):
-    text = message.lower().strip()
-
-    texture = extract_hair_texture(text)
-    type_info = extract_hair_type_traits(text)
-    concerns = extract_concerns(text)
-
-    hair_type_keywords = type_info["hair_type_keywords"][:]
-
-    # --- Smarter direct keyword capture ---
-    # Catch hair type directly from text if missed
-    if not hair_type_keywords:
-        if any(word in text for word in ["dry", "dryness", "frizzy", "rough"]):
-            hair_type_keywords.append("Dry")
-        if any(word in text for word in ["damaged", "breakage", "broken"]):
-            hair_type_keywords.append("Damaged")
-        if any(word in text for word in ["colored", "color-treated", "dyed", "bleached"]):
-            hair_type_keywords.append("Colored & Bleached")
-
-    # Catch texture from descriptive words if missed
-    if not texture:
-        if any(word in text for word in ["fine", "thin", "delicate"]):
-            texture = "Fine"
-        elif any(word in text for word in ["medium", "normal"]):
-            texture = "Medium"
-        elif any(word in text for word in ["coarse", "thick", "dense", "wavy", "curly"]):
-            texture = "Coarse"
-
-    # If hydration/moisture mentioned but no dryness detected
-    if "Moisturizing" in concerns["all_detected"] and "Dry" not in hair_type_keywords:
-        hair_type_keywords.append("Dry")
-
-    # If color/bleach mentioned, ensure color concern consistency
-    if any(k in text for k in ["color", "bleach", "dyed"]) and "Color protection" not in concerns["all_detected"]:
-        concerns["all_detected"].append("Color protection")
-
+def analyze_text_input(user_input: str) -> dict:
+    """
+    Analyze text to extract hair attributes, concerns, and detect clarifications.
+    """
+    text = user_input.strip().lower()
     result = {
-        "hair_texture": texture,
-        "hair_type_keywords": list(dict.fromkeys(hair_type_keywords)),  # remove duplicates
-        "primary_concern": concerns["primary_concern"],
-        "secondary_concern": concerns["secondary_concern"],
-        "detected_concerns": concerns["all_detected"],
+        "hair_type_keywords": [],
+        "hair_texture": None,
+        "primary_concern": None,
+        "secondary_concern": None,
+        "detected_concerns": [],
+        "is_clarification": False,
     }
+
+    # --- Detect clarification messages like “hydration”, “repair”, or “nourishment” ---
+    clarification_keywords = ["hydration", "repair", "nourishment", "moisture", "dryness", "damage"]
+    if text in clarification_keywords or any(word in text for word in clarification_keywords):
+        result["is_clarification"] = True
+
+    # --- Hair texture detection ---
+    result["hair_texture"] = extract_hair_texture(text)
+
+    # --- Hair type keywords ---
+    for t in ["dry", "damaged", "colored", "bleached"]:
+        if t in text:
+            result["hair_type_keywords"].append(t.capitalize())
+
+    # --- Concern detection ---
+    concern_map = {
+        "dry": "Dryness",
+        "hydration": "Dryness",
+        "moisture": "Dryness",
+        "moisturizing": "Dryness",
+        "frizz": "Frizz Control",
+        "smooth": "Frizz Control",
+        "shine": "Dullness",
+        "dull": "Dullness",
+        "repair": "Damage",
+        "breakage": "Damage",
+        "split": "Damage",
+        "color": "Color Care",
+        "nourish": "Nutrition",
+        "nourishment": "Nutrition",
+        "regeneration": "Damage",
+    }
+
+    for key, val in concern_map.items():
+        if key in text:
+            if not result["primary_concern"]:
+                result["primary_concern"] = val
+            elif val != result["primary_concern"]:
+                result["secondary_concern"] = val
+            result["detected_concerns"].append(val)
 
     return result
