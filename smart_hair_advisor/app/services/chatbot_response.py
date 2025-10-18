@@ -80,25 +80,25 @@ def update_session(session_id: str, new_data: Dict[str, Any]) -> Dict[str, Any]:
 # --- Match evaluator ---
 def evaluate_matches(matches):
     if not matches:
-        return {"message": "I couldn’t find a confident match yet."}
+        return {"message": "Hmm, I'm having a bit of trouble finding the perfect match for you right now. Could you tell me a bit more about your hair?"}
 
     normalized = [{k.strip(): v for k, v in m.items()} for m in matches]
     top_products = list({m.get("Product") for m in normalized if m.get("Product")})
     if not top_products:
-        return {"message": "Sorry, no recognizable products found in matches."}
+        return {"message": "Oops! I couldn't find any products that match your needs. Let me try to help you better!"}
 
     if len(top_products) == 1:
         product = top_products[0]
         combined_steps = [m for m in normalized if m.get("Product") == product]
         return {
-            "message": f"I recommend the **{product}** range. It includes:",
+            "message": f"Perfect! I've found just the right solution for you. I recommend the **{product}** range — it's exactly what your hair needs! Here's what it includes:",
             "combined_recommendations": sanitize(combined_steps),
             "final_recommendation": True,
         }
 
     products = ", ".join(top_products)
     return {
-        "message": f"I found strong matches for {products}. Which goal is more important — repair, hydration, or nourishment?",
+        "message": f"Great news! I found some fantastic matches for you: {products}. To give you the best recommendation, could you help me understand which goal is most important to you — repair, hydration, or nourishment?",
         "need_clarification": True,
         "options": top_products,
     }
@@ -200,7 +200,7 @@ def generate_chatbot_response(
         missing = [f for f in required_fields if not user_profile.get(f)]
         if user_profile.get("_last_asked") == missing:
             return {
-                "message": "I’m still not sure — could you describe your hair in a bit more detail?",
+                "message": "I'd love to help you find the perfect hair care solution! Could you tell me a bit more about your hair so I can give you the best recommendation?",
                 "need_more_info": True,
                 "user_profile": sanitize(user_profile),
                 "session_id": session_id,
@@ -209,11 +209,11 @@ def generate_chatbot_response(
 
         prompts = []
         if "hair_type" in missing:
-            prompts.append("Could you tell me your hair type? (e.g., dry, damaged, or colored)")
+            prompts.append("What's your hair type like? (e.g., dry, damaged, or colored)")
         if "hair_texture" in missing:
-            prompts.append("What’s your hair texture like — fine, medium, or coarse?")
+            prompts.append("How would you describe your hair texture — fine, medium, or coarse?")
         if "primary_concern" in missing:
-            prompts.append("What’s your main concern — frizz, dryness, or repair?")
+            prompts.append("What's your main hair concern — frizz, dryness, or repair?")
 
         return {
             "message": " ".join(prompts),
@@ -227,7 +227,7 @@ def generate_chatbot_response(
 
     if not matches:
         return {
-            "message": "I couldn’t find a confident match yet. Could you share more about your goals — moisture, volume, or repair?",
+            "message": "I'm having a bit of trouble finding the perfect match for you. Could you tell me more about your hair goals — are you looking for moisture, volume, or repair?",
             "need_more_info": True,
             "user_profile": sanitize(user_profile),
             "session_id": session_id,
@@ -240,7 +240,7 @@ def generate_chatbot_response(
     # --- Step 11: Low-confidence fallback ---
     if top_score < 0.6 and not user_profile.get("primary_concern"):
         return {
-            "message": "Hmm, I'm not completely sure yet — could you tell me more about your goals? For example, do you want hydration, color protection, or repair?",
+            "message": "I want to make sure I give you the perfect recommendation! Could you tell me more about your hair goals? For example, are you looking for hydration, color protection, or repair?",
             "need_more_info": True,
             "user_profile": sanitize(user_profile),
             "matches": sanitize(normalized_matches),

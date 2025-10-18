@@ -21,6 +21,6 @@ app.add_middleware(
 # Root endpoint
 @app.get("/")
 def root():
-    return {"message": "Welcome to Smart Hair Advisor API 🚀"}
+    return {"message": "Hi there! 👋 Welcome to your personal Hair Care Assistant! I'm here to help you find the perfect Gliss products for your beautiful hair. Let's get started! ✨"}
 
 app.include_router(chatbot.router)
