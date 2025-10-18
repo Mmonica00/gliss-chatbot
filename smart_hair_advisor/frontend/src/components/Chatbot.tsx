@@ -140,60 +140,136 @@ const Chatbot = () => {
           <div
             key={i}
             style={{
-              marginBottom: "10px",
-              textAlign: m.sender === "user" ? "right" : "left",
+              marginBottom: "15px",
+              display: "flex",
+              flexDirection: m.sender === "user" ? "row-reverse" : "row",
+              alignItems: "flex-start",
+              gap: "8px"
             }}
           >
-            <strong>{m.sender === "user" ? "You" : "Bot"}:</strong> 
-            <div style={{ 
-              whiteSpace: "pre-wrap", 
-              marginTop: "5px",
-              padding: "8px",
-              backgroundColor: m.sender === "user" ? "#e3f2fd" : "#f5f5f5",
-              borderRadius: "8px",
-              display: "inline-block",
-              maxWidth: "80%"
+            {/* Avatar */}
+            <div style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              backgroundColor: m.sender === "user" ? "#6c63ff" : "#4caf50",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontSize: "14px",
+              fontWeight: "bold",
+              flexShrink: 0
             }}>
-              {m.text}
+              {m.sender === "user" ? "👤" : "🤖"}
+            </div>
+            
+            {/* Message bubble */}
+            <div style={{ 
+              maxWidth: "70%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: m.sender === "user" ? "flex-end" : "flex-start"
+            }}>
+              <div style={{ 
+                whiteSpace: "pre-wrap", 
+                padding: "12px 16px",
+                backgroundColor: m.sender === "user" ? "#6c63ff" : "#f5f5f5",
+                color: m.sender === "user" ? "white" : "#333",
+                borderRadius: m.sender === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                wordWrap: "break-word"
+              }}>
+                {m.text}
+              </div>
             </div>
           </div>
         ))}
         {isLoading && (
-          <div style={{ textAlign: "left", marginBottom: "10px" }}>
-            <strong>Bot:</strong> 
-            <div style={{ 
-              padding: "8px",
-              backgroundColor: "#f5f5f5",
-              borderRadius: "8px",
-              display: "inline-block"
+          <div style={{
+            marginBottom: "15px",
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: "8px"
+          }}>
+            {/* Bot Avatar */}
+            <div style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              backgroundColor: "#4caf50",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontSize: "14px",
+              fontWeight: "bold",
+              flexShrink: 0
             }}>
-              Thinking...
+              🤖
+            </div>
+            
+            {/* Loading bubble */}
+            <div style={{ 
+              maxWidth: "70%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start"
+            }}>
+              <div style={{ 
+                padding: "12px 16px",
+                backgroundColor: "#f5f5f5",
+                color: "#333",
+                borderRadius: "18px 18px 18px 4px",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <div style={{
+                  width: "12px",
+                  height: "12px",
+                  borderRadius: "50%",
+                  backgroundColor: "#4caf50",
+                  animation: "pulse 1.5s ease-in-out infinite"
+                }}></div>
+                <span>Thinking...</span>
+              </div>
             </div>
           </div>
         )}
       </div>
 
       <div className="chat-input">
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
           <input
             type="file"
             accept="image/*"
             onChange={handleFileSelect}
             style={{ 
+              width: "100%",
               padding: "8px",
               border: "1px solid #ddd",
               borderRadius: "4px",
-              fontSize: "12px"
+              fontSize: "12px",
+              boxSizing: "border-box"
             }}
             placeholder="Upload an image..."
           />
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", width: "100%" }}>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              style={{ flex: 1, padding: "12px", border: "1px solid #ddd", borderRadius: "4px" }}
+              style={{ 
+                flex: 1, 
+                padding: "12px", 
+                border: "1px solid #ddd", 
+                borderRadius: "4px",
+                boxSizing: "border-box"
+              }}
             />
             <button 
               onClick={() => handleSend()} 
@@ -204,7 +280,8 @@ const Chatbot = () => {
                 border: "none",
                 padding: "12px 20px",
                 borderRadius: "4px",
-                cursor: isLoading ? "not-allowed" : "pointer"
+                cursor: isLoading ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap"
               }}
             >
               {isLoading ? "..." : "Send"}
