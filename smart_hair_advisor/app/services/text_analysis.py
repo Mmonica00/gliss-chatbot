@@ -1,12 +1,9 @@
-# app/services/text_analysis.py
-
 import re
 
 # ==============================
 # 1️⃣ Hair texture extraction
 # ==============================
 def extract_hair_texture(text: str):
-    """Detect hair texture: Fine / Medium / Coarse."""
     text = text.lower()
     if "fine" in text:
         return "Fine"
@@ -14,6 +11,12 @@ def extract_hair_texture(text: str):
         return "Medium"
     elif "coarse" in text:
         return "Coarse"
+    elif "thick" in text:
+        return "Coarse"
+    elif "thin" in text:
+        return "Fine"
+    elif "wavy" in text:
+        return "Medium"
     return None
 
 
@@ -21,35 +24,21 @@ def extract_hair_texture(text: str):
 # 2️⃣ Hair type traits extraction
 # ==============================
 def extract_hair_type_traits(text: str):
-    """
-    Detect traits such as:
-      - Greasy roots
-      - Prone to split ends
-      - Brittle
-      - Strawy
-      - Dry
-      - Damaged
-      - Colored 
-      - Bleached
-      - Normal
-      - Dry tips
-    """
     text = text.lower()
 
     traits = {
-        "greasy_roots": any(word in text for word in ["greasy roots", "oily roots", "scalp is oily", "hair gets oily", "oily scalp", "greasy scalp"]),
-        "split_ends": any(word in text for word in ["split ends", "ends are damaged", "split hair", "hair splits",]),
+        "greasy_roots": any(word in text for word in ["greasy roots", "oily roots", "scalp is oily", "oily scalp"]),
+        "split_ends": any(word in text for word in ["split ends", "ends are damaged", "split hair"]),
         "brittle": "brittle" in text or "breaks easily" in text,
-        "strawy": "strawy" in text or "frizzy" in text or "rough" in text,
-        "dry": any(word in text for word in ["dry hair", "hair is dry", "dryness", "dry scalp", "dry strands", "parched"]),
-        "damaged": any(word in text for word in ["damaged hair", "hair is damaged", "damage", "damaging", "broken hair", "hair breakage"]),
-        "colored": any(word in text for word in ["colored hair", "hair is colored", "color treated", "color damage", "coloring"]),
-        "bleached": any(word in text for word in ["bleached hair", "hair is bleached", "bleach treated", "bleach damage", "bleaching"]),
-        "normal": any(word in text for word in ["normal hair", "hair is normal", "not dry", "not oily"]),
-        "dry_tips": any(word in text for word in ["dry tips", "tips are dry", "snappy ends", "dry ends", "dry split ends"])
+        "strawy": any(word in text for word in ["strawy", "frizzy", "rough"]),
+        "dry": any(word in text for word in ["dry", "dryness"]),
+        "damaged": any(word in text for word in ["damaged", "damage"]),
+        "colored": any(word in text for word in ["colored", "color-treated", "dyed"]),
+        "bleached": any(word in text for word in ["bleached", "bleach"]),
+        "normal": "normal hair" in text,
+        "dry_tips": any(word in text for word in ["dry tips", "dry ends"]),
     }
 
-    # convert to list of dataset-style terms
     keywords = []
     if traits["greasy_roots"]:
         keywords.append("Greasy roots")
@@ -64,7 +53,7 @@ def extract_hair_type_traits(text: str):
     if traits["damaged"]:
         keywords.append("Damaged")
     if traits["colored"]:
-        keywords.append("Colored")  
+        keywords.append("Colored")
     if traits["bleached"]:
         keywords.append("Bleached")
     if traits["normal"]:
@@ -79,11 +68,6 @@ def extract_hair_type_traits(text: str):
 # 3️⃣ Concern extraction
 # ==============================
 def extract_concerns(text: str):
-    """
-    Extract primary and secondary hair concerns.
-    The mapping is designed to align with your dataset wording.
-    """
-
     text = text.lower()
     concern_map = {
         "dry": "Dryness",
@@ -102,7 +86,7 @@ def extract_concerns(text: str):
         "moisture": "Moisturizing",
         "hydration": "Moisturizing",
         "oily": "Oily scalp",
-        "greasy": "Oily scalp"
+        "greasy": "Oily scalp",
     }
 
     found = []
@@ -110,35 +94,62 @@ def extract_concerns(text: str):
         if re.search(rf"\b{k}\b", text):
             found.append(v)
 
-    found = list(dict.fromkeys(found))  # deduplicate while preserving order
-
-    primary_concern = found[0] if len(found) > 0 else None
+    found = list(dict.fromkeys(found))
+    primary_concern = found[0] if found else None
     secondary_concern = found[1] if len(found) > 1 else None
 
-    return {"primary_concern": primary_concern, "secondary_concern": secondary_concern, "all_detected": found}
+    return {
+        "primary_concern": primary_concern,
+        "secondary_concern": secondary_concern,
+        "all_detected": found,
+    }
 
 
 # ==============================
-# 4️⃣ Unified function
+# 4️⃣ Unified analyzer (SMART VERSION)
 # ==============================
 def analyze_text_input(message: str):
-    """
-    Extract:
-      - hair_texture
-      - hair_type_keywords
-      - primary_concern
-      - secondary_concern
-    """
-    texture = extract_hair_texture(message)
-    type_info = extract_hair_type_traits(message)
-    concerns = extract_concerns(message)
+    text = message.lower().strip()
+
+    texture = extract_hair_texture(text)
+    type_info = extract_hair_type_traits(text)
+    concerns = extract_concerns(text)
+
+    hair_type_keywords = type_info["hair_type_keywords"][:]
+
+    # --- Smarter direct keyword capture ---
+    # Catch hair type directly from text if missed
+    if not hair_type_keywords:
+        if any(word in text for word in ["dry", "dryness", "frizzy", "rough"]):
+            hair_type_keywords.append("Dry")
+        if any(word in text for word in ["damaged", "breakage", "broken"]):
+            hair_type_keywords.append("Damaged")
+        if any(word in text for word in ["colored", "color-treated", "dyed", "bleached"]):
+            hair_type_keywords.append("Colored & Bleached")
+
+    # Catch texture from descriptive words if missed
+    if not texture:
+        if any(word in text for word in ["fine", "thin", "delicate"]):
+            texture = "Fine"
+        elif any(word in text for word in ["medium", "normal"]):
+            texture = "Medium"
+        elif any(word in text for word in ["coarse", "thick", "dense", "wavy", "curly"]):
+            texture = "Coarse"
+
+    # If hydration/moisture mentioned but no dryness detected
+    if "Moisturizing" in concerns["all_detected"] and "Dry" not in hair_type_keywords:
+        hair_type_keywords.append("Dry")
+
+    # If color/bleach mentioned, ensure color concern consistency
+    if any(k in text for k in ["color", "bleach", "dyed"]) and "Color protection" not in concerns["all_detected"]:
+        concerns["all_detected"].append("Color protection")
 
     result = {
         "hair_texture": texture,
-        "hair_type_keywords": type_info["hair_type_keywords"],
+        "hair_type_keywords": list(dict.fromkeys(hair_type_keywords)),  # remove duplicates
         "primary_concern": concerns["primary_concern"],
         "secondary_concern": concerns["secondary_concern"],
-        "detected_concerns": concerns["all_detected"]
+        "detected_concerns": concerns["all_detected"],
     }
 
     return result
