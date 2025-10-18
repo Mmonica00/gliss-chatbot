@@ -258,10 +258,29 @@ def generate_chatbot_response(
     # Prevent repeated looping if clarification was already given
     if text_result.get("is_clarification") or any(k in text_lower for k in ["hydration", "repair", "nourishment"]):
         evaluation["need_clarification"] = False
-        evaluation["message"] = evaluation.get("message", "").replace(
-            "Which goal is more important — repair, hydration, or nourishment?", ""
-        ).strip()
-        evaluation["message"] = evaluation["message"] or "Got it — based on what you said, here’s my best match."
+        
+        # Filter matches based on clarification
+        if "hydration" in text_lower or "moisturizing" in text_lower:
+            # Prefer Aqua Revive for hydration
+            filtered_matches = [m for m in normalized_matches if m.get("Product") == "Aqua Revive"]
+            if filtered_matches:
+                normalized_matches = filtered_matches
+        elif "repair" in text_lower:
+            # Prefer Total Repair for repair
+            filtered_matches = [m for m in normalized_matches if m.get("Product") == "Total Repair"]
+            if filtered_matches:
+                normalized_matches = filtered_matches
+        elif "nourishment" in text_lower or "nutrition" in text_lower:
+            # Prefer products with nutrition focus
+            filtered_matches = [m for m in normalized_matches if "Nutrition" in str(m.get("Primary Concern", "")) or "Nutrition" in str(m.get("Secondary Concern", ""))]
+            if filtered_matches:
+                normalized_matches = filtered_matches
+        
+        # Re-evaluate with filtered matches
+        if normalized_matches:
+            evaluation = evaluate_matches(normalized_matches)
+            evaluation["need_clarification"] = False
+            evaluation["final_recommendation"] = True
 
     # --- Step 13: Return response ---
     evaluation.update({
