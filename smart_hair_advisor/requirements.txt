@@ -7,3 +7,13 @@ spacy
 streamlit
 python-dotenv
 pydantic
+numpy
+pillow
+rembg
+langchain
+onnxruntime
+multipart
+openai
+google-cloud-vision
+tf-keras
+openpyxl

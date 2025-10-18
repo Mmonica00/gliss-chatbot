@@ -1,32 +1,33 @@
 # app/api/chatbot.py
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form
-from app.services.analysis import analyze_user_input
-from app.services.text_analysis import analyze_text_input
-from app.services.matcher import match_user_profile
+from app.services.chatbot_response import (
+    generate_chatbot_response,
+    generate_session_id,   # <-- new import
+    reset_sessions         # optional import if you want to expose reset endpoint
+)
 import numpy as np
 import pandas as pd
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
+
+# --- Utility sanitization helpers (same as before) ---
 def _sanitize_value(v):
     """Convert numpy/pandas scalars recursively to python types."""
-    # NumPy scalar
     if isinstance(v, (np.generic,)):
         try:
             return v.item()
         except Exception:
             return v.tolist() if hasattr(v, "tolist") else v
-    # pandas NA
     if pd.isna(v):
         return None
-    # dict/list: recurse
     if isinstance(v, dict):
         return {k: _sanitize_value(val) for k, val in v.items()}
     if isinstance(v, list):
         return [_sanitize_value(i) for i in v]
-    # other types: return as-is
     return v
+
 
 def sanitize(obj):
     """Recursively sanitize common containers to be JSON serializable."""
@@ -37,74 +38,47 @@ def sanitize(obj):
     return _sanitize_value(obj)
 
 
+# --- Main chatbot endpoint ---
 @router.post("/analyze")
-async def analyze_hair(
-    message: str = Form(...),
-    image: Optional[UploadFile] = File(None)
+async def analyze_chatbot_input(
+    message: Optional[str] = Form(None, description="User text input"),
+    image: Optional[UploadFile] = File(None, description="Optional hair image"),
+    session_id: Optional[str] = Form(None, description="Session ID for ongoing chat")
 ):
-    # analyze text always
-    text_result = analyze_text_input(message)
-    image_result = None
-    hair_type_list = []
+    """
+    Unified chatbot entry point — handles text and image input.
+    Automatically manages session lifecycle and expiry.
+    """
+    image_bytes = await image.read() if image else None
 
-    # If image provided, analyze it
-    if image:
-        img_bytes = await image.read()
-        image_result = analyze_user_input(img_bytes)
+    # Defensive check — must provide either text or image
+    if not message and not image_bytes:
+        return {
+            "error": "Please provide either a text message or an image for analysis."
+        }
 
-        # image_result may contain booleans from numpy — sanitize later
-        # convert image interpretation keywords into simple trait tokens
-        if isinstance(image_result, dict):
-            # prefer hair_type_keywords if available (we added it in analysis.py)
-            kws = image_result.get("hair_type_keywords")
-            if kws:
-                # Normalize to lower-case tokens for matcher
-                hair_type_list.extend([str(k).lower() for k in kws])
-            else:
-                # fallback to interpretation strings -> keywords
-                for interp in image_result.get("interpretation", []):
-                    it = str(interp).lower()
-                    if "dull" in it:
-                        hair_type_list.append("dull")
-                    if "dry" in it:
-                        hair_type_list.append("dry")
-                    if "color" in it or "bleach" in it:
-                        hair_type_list.append("colored & bleached")
-                    if "frizz" in it or "straw" in it or "texture" in it:
-                        hair_type_list.append("strawy")
-                    if "damage" in it or "split" in it:
-                        hair_type_list.append("damaged")
-                    if "long" in it:
-                        hair_type_list.append("long hair")
+    # If no session ID provided (e.g., user reloaded the site) → generate new one
+    if not session_id or session_id == "default_session":
+        session_id = generate_session_id()
+        print(f"🆕 New session generated on frontend reload: {session_id}")
 
-    # Always include text-detected keywords
-    text_keywords = text_result.get("hair_type_keywords", [])
-    hair_type_list.extend([str(k).lower() for k in text_keywords])
+    # Run chatbot logic
+    response = generate_chatbot_response(
+        message=message or "",
+        image_bytes=image_bytes,
+        session_id=session_id
+    )
 
-    # remove duplicates while preserving order
-    seen = set()
-    combined_hair_type = []
-    for item in hair_type_list:
-        if item not in seen:
-            seen.add(item)
-            combined_hair_type.append(item)
+    # Ensure the session_id is always returned for frontend continuity
+    if "session_id" not in response:
+        response["session_id"] = session_id
 
-    user_profile = {
-        "hair_type": combined_hair_type,
-        "hair_texture": text_result.get("hair_texture"),
-        "primary_concern": text_result.get("primary_concern"),
-        "secondary_concern": text_result.get("secondary_concern"),
-    }
-
-    matches = match_user_profile(user_profile)
-
-    response = {
-        "input_message": message,
-        "hair_profile": user_profile,
-        "text_analysis": text_result,
-        "image_analysis": image_result,
-        "matches": matches
-    }
-
-    # sanitize entire response recursively before returning
     return sanitize(response)
+
+
+# --- Optional: Admin/Debug Endpoint ---
+@router.post("/reset")
+async def reset_all_sessions():
+    """Manually clear all session data (useful for admin/debugging)."""
+    reset_sessions()
+    return {"message": "All chatbot sessions have been cleared."}
